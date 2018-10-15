@@ -6,6 +6,7 @@ import compressor.models.CompressionParams
 import compressor.models.FileConfig
 import compressor.models.InOutStreamPair
 import compressor.search.SlidingWindowSearch
+import getFiles
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import util.log
@@ -37,42 +38,46 @@ internal class CompressorTest {
         var compressedFilePath: String? = null
         var uncompressedFilePath: String? = null
         var uncompressedFile: File? = null
+        var allFilesAreTheSame = true
 
         // get a pristine file
-        getFiles(pristineConfig.dir)?.take(1)?.first()?.let {
+        getFiles(pristineConfig.dir)?.forEach {
             pristineFileName = it.name
             pristineFile = it
-        }
 
-        // compress the pristine file to compressed file
-        pristineFile?.let { pristineF ->
-            compressedFilePath = compressedConfig.makePathForName(pristineF.name)
-            with(InOutStreamPair(pristineF.path, compressedFilePath!!)) {
-                compressor.compress("${pristineF.name} Compression", inStream, BinaryCompressionOutput(outStream, params))
+
+            // compress the pristine file to compressed file
+            pristineFile?.let { pristineF ->
+                compressedFilePath = compressedConfig.makePathForName(pristineF.name)
+                with(InOutStreamPair(pristineF.path, compressedFilePath!!)) {
+                    compressor.compress("${pristineF.name} Compression", inStream, BinaryCompressionOutput(outStream, params))
+                }
             }
-        }
 
-        // get the compressed version of the file
-        getFiles(compressedConfig.dir)?.first { it.nameWithoutExtension == pristineFileName }?.let {
-            compressedFile = it
-        }
-
-        // uncompress the compressed version of the file
-        compressedFile?.let { compressedF ->
-            uncompressedFilePath = uncompressedConfig.makePathForName(compressedF.nameWithoutExtension)
-            with(InOutStreamPair(compressedF.path, uncompressedFilePath!!)) {
-                compressor.decompress("${compressedF.name} Decompression", BinaryCompressionInput(inStream, params), outStream)
+            // get the compressed version of the file
+            getFiles(compressedConfig.dir)?.first { it.nameWithoutExtension == pristineFileName }?.let {
+                compressedFile = it
             }
-        }
 
-        // get the uncompressed file
-        getFiles(uncompressedConfig.dir)?.first { it.name == pristineFileName }?.let {
-            uncompressedFile = it
-        }
+            // uncompress the compressed version of the file
+            compressedFile?.let { compressedF ->
+                uncompressedFilePath = uncompressedConfig.makePathForName(compressedF.nameWithoutExtension)
+                with(InOutStreamPair(compressedF.path, uncompressedFilePath!!)) {
+                    compressor.decompress("${compressedF.name} Decompression", BinaryCompressionInput(inStream, params), outStream)
+                }
+            }
 
-        val filesAreEqual = Arrays.equals(pristineFile?.readBytes(), uncompressedFile?.readBytes())
+            // get the uncompressed file
+            getFiles(uncompressedConfig.dir)?.first { it.name == pristineFileName }?.let {
+                uncompressedFile = it
+            }
+            val theseFilesAreTheSame = Arrays.equals(pristineFile?.readBytes(), uncompressedFile?.readBytes())
+            log("Uncompressed file is uncorrupted from pristine state: $theseFilesAreTheSame")
+            allFilesAreTheSame = allFilesAreTheSame && Arrays.equals(pristineFile?.readBytes(), uncompressedFile?.readBytes())
+        }
+        
         // assert that the pristine file and uncompressed file are now the same size
-        assertTrue(filesAreEqual)
+        assertTrue(allFilesAreTheSame)
     }
 
     @Test
@@ -128,6 +133,11 @@ internal class CompressorTest {
     @Test
     @DisplayName("Files contents are smaller after compression")
     fun fileAggregateSizeIsSmallerAfterCompression() {
+
+        /**
+         * NOTE: This test compresses all of the files, but does not decompress them all again. So the uncompressed folder
+         * will likely have less files in it.
+         * */
         val params = CompressionParams()
         var compressor = Compressor(params, SlidingWindowSearch(params))
         var pristineFileName: String? = null
