@@ -75,7 +75,7 @@ internal class CompressorTest {
             log("Uncompressed file is uncorrupted from pristine state: $theseFilesAreTheSame")
             allFilesAreTheSame = allFilesAreTheSame && Arrays.equals(pristineFile?.readBytes(), uncompressedFile?.readBytes())
         }
-        
+
         // assert that the pristine file and uncompressed file are now the same size
         assertTrue(allFilesAreTheSame)
     }
